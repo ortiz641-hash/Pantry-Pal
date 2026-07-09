@@ -4,7 +4,7 @@ A desktop application that is designed to help households manage their food effi
 ## Team Members
 
 - Adonis Dunn
-- Name
+- Ricardo Duke
 - Name
 - Name
 - Name
