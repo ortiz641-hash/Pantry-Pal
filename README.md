@@ -6,7 +6,7 @@ A desktop application that is designed to help households manage their food effi
 - Adonis Dunn
 - Ricardo Duke
 - Meekeh Mohammadi
-- Name
+- Jon-Adam Ortiz
 - Name
 
 ## Features
