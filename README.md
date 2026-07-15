@@ -7,7 +7,7 @@ A desktop application that is designed to help households manage their food effi
 - Ricardo Duke
 - Meekeh Mohammadi
 - Jon-Adam Ortiz
-- Name
+- Huy La
 
 ## Features
 
