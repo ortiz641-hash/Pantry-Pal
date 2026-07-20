@@ -2,22 +2,19 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QString>
 
-QT_BEGIN_NAMESPACE
-namespace Ui {
-class MainWindow;
-}
-QT_END_NAMESPACE
+class QPushButton;
+class QWidget;
 
 class MainWindow : public QMainWindow
 {
-    Q_OBJECT
-
 public:
     explicit MainWindow(QWidget *parent = nullptr);
-    ~MainWindow() override;
 
 private:
-    Ui::MainWindow *ui;
+    QPushButton *createNavigationButton(const QString &text);
+    QPushButton *createStatButton(const QString &title);
 };
+
 #endif // MAINWINDOW_H
