@@ -13,6 +13,8 @@ add_executable(PantryPalMain
     main.cpp
     mainwindow.cpp
     mainwindow.h
+    pantrypage.h
+    pantrypage.cpp
 )
 
 target_link_libraries(PantryPalMain PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
