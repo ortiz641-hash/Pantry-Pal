@@ -1,6 +1,5 @@
 #ifndef LOGINWINDOW_H
 #define LOGINWINDOW_H // PREVENT the file from loading twice
-
 #include <QWidget> // for visual in QT
 
 namespace Ui
@@ -8,7 +7,9 @@ namespace Ui
     class LoginWindow;
 }
 
+
 class LoginWindow : public QWidget
+
 {
     Q_OBJECT // This is needed to use signals and slots
 

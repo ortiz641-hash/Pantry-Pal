@@ -14,9 +14,9 @@ add_executable(PantryPalMain
     main.cpp
     mainwindow.cpp
     mainwindow.h
-    LoginWindow.h 
-    LoginWindow.cpp
-    LoginWindow.ui
+    "loginwindow.h" 
+    "loginwindow.cpp"
+    loginwindow.ui
 )
 
 target_link_libraries(PantryPalMain PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)

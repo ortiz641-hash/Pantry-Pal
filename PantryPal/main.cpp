@@ -1,24 +1,26 @@
 #include "mainwindow.h"
-#include "LoginWindow.h"
+#include "loginwindow.h"
 #include <QApplication>
+
 
 int main(int argc, char *argv[])
 {
     QApplication application(argc, argv);
     application.setApplicationName("PantryPal Main");
 
-    LoginWindow* loginWindow = new LoginWindow();
-    MainWindow* mainWindow = new MainWindow();
-
+    LoginWindow loginWindow;
+    MainWindow mainWindow;
     
-    QObject::connect(loginWindow, &LoginWindow::loginSuccessful, [loginWindow, mainWindow]() 
+    QObject::connect(&loginWindow, &LoginWindow::loginSuccessful, [&]()
+        
         {
-            loginWindow->close();
-            mainWindow->show();
+
+        loginWindow.close();
+        mainWindow.show();
+
         }
     );
 
-    loginWindow->show();
-
+    loginWindow.show();
     return application.exec();
 }
