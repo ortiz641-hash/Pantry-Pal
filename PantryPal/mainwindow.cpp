@@ -1,4 +1,6 @@
 #include "mainwindow.h"
+#include "pantrypage.h"
+#include <QStackedWidget>
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -36,8 +38,11 @@ MainWindow::MainWindow(QWidget *parent)
     sidebarLayout->addWidget(brandName);
     sidebarLayout->addSpacing(20);
 
-    sidebarLayout->addWidget(createNavigationButton("Dashboard"));
-    sidebarLayout->addWidget(createNavigationButton("Pantry"));
+    auto *dashboardButton = createNavigationButton("Dashboard");
+    auto *pantryButton = createNavigationButton("Pantry");
+
+    sidebarLayout->addWidget(dashboardButton);
+    sidebarLayout->addWidget(pantryButton);
     sidebarLayout->addWidget(createNavigationButton("Shopping List"));
     sidebarLayout->addWidget(createNavigationButton("Profile"));
     sidebarLayout->addStretch();
@@ -84,8 +89,23 @@ MainWindow::MainWindow(QWidget *parent)
 
     dashboardLayout->addWidget(recentItemsPanel, 1);
 
+    auto *pageStack = new QStackedWidget;
+
+    pageStack->addWidget(dashboard);          // index 0
+    pageStack->addWidget(new PantryPage);     // index 1
+
+    connect(dashboardButton, &QPushButton::clicked,
+            pageStack, [pageStack]() {
+                pageStack->setCurrentIndex(0);
+            });
+
+    connect(pantryButton, &QPushButton::clicked,
+            pageStack, [pageStack]() {
+                pageStack->setCurrentIndex(1);
+            });
+
     windowLayout->addWidget(sidebar);
-    windowLayout->addWidget(dashboard);
+    windowLayout->addWidget(pageStack);
     windowLayout->setStretch(0, 1);
     windowLayout->setStretch(1, 4);
 }
