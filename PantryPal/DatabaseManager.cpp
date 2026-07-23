@@ -61,14 +61,14 @@ bool DatabaseManager::addItem(const PantryItem &item)
 {
     QSqlQuery query(db); // query object is used to execute SQL statements and retrieve results from the databaseIt is initialized with the database connection db.
     query.prepare(R"(
-        INSERT INTO pantry_items (name, category, quantity, unit, expiration_date, notes) //sql statement that i had to look up.
-        VALUES (:name, :category, :quantity, :unit, :expiration, :notes)
+        INSERT INTO pantry_items (name, category, quantity, unit, expiration_date, notes) 
+        VALUES (:name, :category, :quantity, :unit, :expiration_date, :notes)
     )");
     query.bindValue(":name", item.name); //the next 6 lines are for locking the pantry item values to the statement above. keeps the format correct.
     query.bindValue(":category", item.category);
     query.bindValue(":quantity", item.quantity);
     query.bindValue(":unit", item.unit);
-    query.bindValue(":expiration", item.expirationDate);
+    query.bindValue(":expiration_date", item.expirationDate);
     query.bindValue(":notes", item.notes);
 
     if (!query.exec()) {
@@ -131,7 +131,7 @@ QVector<PantryItem> DatabaseManager::getAllItems() //function returns a vector o
 
     while (query.next()) {
         PantryItem item;
-        item.id             = query.value(0).toInt();
+        item.id = query.value(0).toInt();
         item.name           = query.value(1).toString();
         item.category       = query.value(2).toString();
         item.quantity       = query.value(3).toDouble();

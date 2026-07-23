@@ -91,7 +91,8 @@ void PantryPage::openAddItemDialog() //pulls from new item dialog files i added 
 {
     ItemDialog dialog(this);
     if (dialog.exec() == QDialog::Accepted) {
-        dbManager->addItem(dialog.item());
+        bool ok = dbManager->addItem(dialog.item());
+        qDebug() << "Add item returned:" << ok;
         refreshTable();
         emit inventoryChanged();
     }
