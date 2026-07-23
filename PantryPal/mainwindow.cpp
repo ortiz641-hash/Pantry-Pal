@@ -1,6 +1,9 @@
 #include "mainwindow.h"
 #include "pantrypage.h"
+#include "profilepage.h"
 #include <QStackedWidget>
+
+
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -44,7 +47,10 @@ MainWindow::MainWindow(QWidget *parent)
     sidebarLayout->addWidget(dashboardButton);
     sidebarLayout->addWidget(pantryButton);
     sidebarLayout->addWidget(createNavigationButton("Shopping List"));
-    sidebarLayout->addWidget(createNavigationButton("Profile"));
+    
+    auto* profileButton = createNavigationButton("Profile"); 
+    sidebarLayout->addWidget(profileButton);
+   
     sidebarLayout->addStretch();
 
     auto *dashboard = new QFrame;
@@ -91,8 +97,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *pageStack = new QStackedWidget;
 
+    //--- page stack ---- 
+
     pageStack->addWidget(dashboard);          // index 0
     pageStack->addWidget(new PantryPage);     // index 1
+    pageStack->addWidget(new ProfilePage);    // index 2
+
+    //--- connection -----
 
     connect(dashboardButton, &QPushButton::clicked,
             pageStack, [pageStack]() {
@@ -103,6 +114,13 @@ MainWindow::MainWindow(QWidget *parent)
             pageStack, [pageStack]() {
                 pageStack->setCurrentIndex(1);
             });
+   
+    connect(profileButton, &QPushButton::clicked,
+            pageStack, [pageStack]() {
+                pageStack->setCurrentIndex(2);
+            });
+
+    //---- layout ----- 
 
     windowLayout->addWidget(sidebar);
     windowLayout->addWidget(pageStack);
