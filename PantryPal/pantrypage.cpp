@@ -1,337 +1,152 @@
-#include "pantrypage.h"
+#include "PantryPage.h"
+#include "ItemDialog.h"
 
-#include <QAbstractItemView>
 #include <QComboBox>
-#include <QHeaderView>
-#include <QHBoxLayout>
-#include <QLabel>
 #include <QLineEdit>
-#include <QMessageBox>
 #include <QPushButton>
 #include <QTableWidget>
-#include <QTableWidgetItem>
+#include <QHeaderView>
+#include <QMessageBox>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QAbstractItemView>
 
-PantryPage::PantryPage(QWidget *parent)
-    : QWidget(parent),
-    searchField(new QLineEdit(this)),
-    locationFilter(new QComboBox(this)),
-    inventoryTable(new QTableWidget(this)),
-    addItemButton(new QPushButton("+  Add Item", this)),
-    editButton(new QPushButton("Edit Item", this)),
-    deleteButton(new QPushButton("Delete Item", this))
+PantryPage::PantryPage(DatabaseManager *dbManager, QWidget *parent) //edited to add functionality to the buttons of add edit and delete
+    : QWidget(parent), dbManager(dbManager)
 {
-    auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setContentsMargins(25, 25, 25, 25);
-    mainLayout->setSpacing(16);
+    addItemButton = new QPushButton("Add Item", this); //similar to what we had before but using more q widgets to work with SQL database easier.
+    searchField = new QLineEdit(this);
+    searchField->setPlaceholderText("Search...");
+    locationFilter = new QComboBox(this);
+    locationFilter->addItem("All");
+    inventoryTable = new QTableWidget(this);
+    editButton = new QPushButton("Edit", this);
+    deleteButton = new QPushButton("Delete", this);
 
-    auto *title = new QLabel("Pantry Inventory", this);
-    title->setObjectName("pageTitle");
+    auto *topBar = new QHBoxLayout;
+    topBar->addWidget(searchField);
+    topBar->addWidget(locationFilter);
+    topBar->addWidget(addItemButton);
+    topBar->addWidget(editButton);
+    topBar->addWidget(deleteButton);
 
-    auto *description = new QLabel(
-        "View and organize food by storage location.",
-        this);
-    description->setObjectName("pageDescription");
-
-    auto *headerLayout = new QHBoxLayout;
-    auto *titleLayout = new QVBoxLayout;
-
-    titleLayout->addWidget(title);
-    titleLayout->addWidget(description);
-
-    addItemButton->setMinimumSize(120, 40);
-
-    headerLayout->addLayout(titleLayout);
-    headerLayout->addStretch();
-    headerLayout->addWidget(addItemButton, 0, Qt::AlignTop);
-
-    mainLayout->addLayout(headerLayout);
-
-    // Search and filtering controls
-    auto *filterLayout = new QHBoxLayout;
-
-    searchField->setPlaceholderText("Search by item name...");
-    searchField->setClearButtonEnabled(true);
-
-    locationFilter->addItem("All Locations");
-    locationFilter->addItem("Pantry");
-    locationFilter->addItem("Refrigerator");
-    locationFilter->addItem("Freezer");
-    locationFilter->addItem("Other");
-
-    filterLayout->addWidget(searchField, 1);
-    filterLayout->addWidget(locationFilter);
-
-    mainLayout->addLayout(filterLayout);
+    auto *layout = new QVBoxLayout(this);
+    layout->addLayout(topBar);
+    layout->addWidget(inventoryTable);
 
     configureTable();
-    mainLayout->addWidget(inventoryTable, 1);
+    refreshTable();
 
-    // Edit/Delete controls
-    auto *buttonLayout = new QHBoxLayout;
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(editButton);
-    buttonLayout->addWidget(deleteButton);
-
-    mainLayout->addLayout(buttonLayout);
-
-    connect(
-        searchField,
-        &QLineEdit::textChanged,
-        this,
-        [this]() {
-            applyFilters();
-        });
-
-    connect(
-        locationFilter,
-        &QComboBox::currentTextChanged,
-        this,
-        [this]() {
-            applyFilters();
-        });
-
-    connect(
-        addItemButton,
-        &QPushButton::clicked,
-        this,
-        &PantryPage::openAddItemDialog);
-
-    connect(
-        editButton,
-        &QPushButton::clicked,
-        this,
-        [this]() {
-            editSelectedItem();
-        });
-
-    connect(
-        deleteButton,
-        &QPushButton::clicked,
-        this,
-        [this]() {
-            deleteSelectedItem();
-        });
-
-    addSampleItems();
+    connect(addItemButton, &QPushButton::clicked, this, &PantryPage::openAddItemDialog); //connects the add item button to the open add item dialog function so i had to change the old connect string here
+    connect(editButton, &QPushButton::clicked, this, &PantryPage::editSelectedItem);
+    connect(deleteButton, &QPushButton::clicked, this, &PantryPage::deleteSelectedItem);
+    connect(searchField, &QLineEdit::textChanged, this, &PantryPage::applyFilters);
+    connect(locationFilter, &QComboBox::currentTextChanged, this, &PantryPage::applyFilters);
 }
 
-void PantryPage::configureTable()
+void PantryPage::configureTable() //had to replace old table config for sql so its dynamic now.
 {
-    inventoryTable->setColumnCount(7);
-
-    inventoryTable->setHorizontalHeaderLabels({
-        "Item",
-        "Quantity",
-        "Unit",
-        "Category",
-        "Location",
-        "Expiration Date",
-        "Minimum Quantity"
-    });
-
-    inventoryTable->setSelectionBehavior(
-        QAbstractItemView::SelectRows);
-
-    inventoryTable->setSelectionMode(
-        QAbstractItemView::SingleSelection);
-
-    inventoryTable->setEditTriggers(
-        QAbstractItemView::NoEditTriggers);
-
-    inventoryTable->setAlternatingRowColors(true);
-    inventoryTable->setSortingEnabled(true);
-
-    inventoryTable->verticalHeader()->setVisible(false);
-
-    inventoryTable->horizontalHeader()->setSectionResizeMode(
-        QHeaderView::Stretch);
+    inventoryTable->setColumnCount(6);
+    inventoryTable->setHorizontalHeaderLabels(
+        {"Name", "Quantity", "Unit", "Category", "Expiration", "Notes"});
+    inventoryTable->horizontalHeader()->setStretchLastSection(true);
+    inventoryTable->setSelectionBehavior(QAbstractItemView::SelectRows);
+    inventoryTable->setSelectionMode(QAbstractItemView::SingleSelection);
+    inventoryTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
 }
 
-void PantryPage::addSampleItems()
+void PantryPage::refreshTable() //replaced the old hard coded stuff with the refresh table fucntion.
 {
-    addTableRow(
-        "Milk",
-        1,
-        "gallon",
-        "Dairy",
-        "Refrigerator",
-        "07/24/2026",
-        1);
-
-    addTableRow(
-        "Chicken",
-        2,
-        "pounds",
-        "Meat",
-        "Freezer",
-        "07/27/2026",
-        1);
-
-    addTableRow(
-        "Rice",
-        3,
-        "bags",
-        "Grains",
-        "Pantry",
-        "12/10/2026",
-        1);
-
-    addTableRow(
-        "Vitamins",
-        1,
-        "bottle",
-        "Health",
-        "Other",
-        "01/15/2027",
-        1);
+    inventoryTable->setRowCount(0);
+    const QVector<PantryItem> items = dbManager->getAllItems();
+    for (const PantryItem &item : items) {
+        addTableRow(item);
+    }
 }
 
-void PantryPage::addTableRow(
-    const QString &name,
-    double quantity,
-    const QString &unit,
-    const QString &category,
-    const QString &location,
-    const QString &expirationDate,
-    double minimumQuantity)
+void PantryPage::addTableRow(const PantryItem &item)
 {
-    // Temporarily turn sorting off so a row cannot move
-    // while its individual cells are being inserted.
-    inventoryTable->setSortingEnabled(false);
-
-    const int row = inventoryTable->rowCount();
+    int row = inventoryTable->rowCount();
     inventoryTable->insertRow(row);
 
-    inventoryTable->setItem(
-        row,
-        0,
-        new QTableWidgetItem(name));
+    auto *nameItem = new QTableWidgetItem(item.name);
+    nameItem->setData(Qt::UserRole, item.id);
 
-    inventoryTable->setItem(
-        row,
-        1,
-        new QTableWidgetItem(QString::number(quantity)));
-
-    inventoryTable->setItem(
-        row,
-        2,
-        new QTableWidgetItem(unit));
-
-    inventoryTable->setItem(
-        row,
-        3,
-        new QTableWidgetItem(category));
-
-    inventoryTable->setItem(
-        row,
-        4,
-        new QTableWidgetItem(location));
-
-    inventoryTable->setItem(
-        row,
-        5,
-        new QTableWidgetItem(expirationDate));
-
-    inventoryTable->setItem(
-        row,
-        6,
-        new QTableWidgetItem(
-            QString::number(minimumQuantity)));
-
-    inventoryTable->setSortingEnabled(true);
+    inventoryTable->setItem(row, 0, nameItem);
+    inventoryTable->setItem(row, 1, new QTableWidgetItem(QString::number(item.quantity)));
+    inventoryTable->setItem(row, 2, new QTableWidgetItem(item.unit));
+    inventoryTable->setItem(row, 3, new QTableWidgetItem(item.category));
+    inventoryTable->setItem(row, 4, new QTableWidgetItem(item.expirationDate));
+    inventoryTable->setItem(row, 5, new QTableWidgetItem(item.notes));
 }
 
-void PantryPage::applyFilters()
+int PantryPage::selectedItemId() const
 {
-    const QString searchText =
-        searchField->text().trimmed();
+    int row = inventoryTable->currentRow();
+    if (row < 0) return -1;
+    return inventoryTable->item(row, 0)->data(Qt::UserRole).toInt();
+}
 
-    const QString selectedLocation =
-        locationFilter->currentText();
-
-    for (int row = 0;
-         row < inventoryTable->rowCount();
-         ++row) {
-
-        QTableWidgetItem *nameItem =
-            inventoryTable->item(row, 0);
-
-        QTableWidgetItem *locationItem =
-            inventoryTable->item(row, 4);
-
-        if (!nameItem || !locationItem) {
-            continue;
-        }
-
-        const bool matchesSearch =
-            nameItem->text().contains(
-                searchText,
-                Qt::CaseInsensitive);
-
-        const bool matchesLocation =
-            selectedLocation == "All Locations"
-            || locationItem->text() == selectedLocation;
-
-        inventoryTable->setRowHidden(
-            row,
-            !(matchesSearch && matchesLocation));
+void PantryPage::openAddItemDialog() //pulls from new item dialog files i added to the project, this is called when the add item button is clicked and it opens a dialog to add a new item to the pantry.
+{
+    ItemDialog dialog(this);
+    if (dialog.exec() == QDialog::Accepted) {
+        bool ok = dbManager->addItem(dialog.item());
+        qDebug() << "Add item returned:" << ok;
+        refreshTable();
+        emit inventoryChanged();
     }
 }
 
-void PantryPage::openAddItemDialog()
+void PantryPage::editSelectedItem() //added the proper edit function over the placeholder we had for the demo same deal as the add item
 {
-    QMessageBox::information(
-        this,
-        "Add Item",
-        "Under development. The Add Item dialog will be connected here.");
-}
-
-void PantryPage::editSelectedItem()
-{
-    const int row = inventoryTable->currentRow();
-
-    if (row < 0) {
-        QMessageBox::information(
-            this,
-            "Edit Item",
-            "Select an item to edit.");
-
+    int id = selectedItemId();
+    if (id < 0) {
+        QMessageBox::information(this, "No selection", "Select an item to edit.");
         return;
     }
 
-    // Temporary behavior for the first demo.
-    // A proper edit dialog can be added in another card.
-    QMessageBox::information(
-        this,
-        "Edit Item",
-        "Edit functionality will be connected next.");
+    PantryItem existing = dbManager->getItemById(id);
+    ItemDialog dialog(this, existing);
+    if (dialog.exec() == QDialog::Accepted) {
+        PantryItem updated = dialog.item();
+        updated.id = id;
+        dbManager->updateItem(updated);
+        refreshTable();
+        emit inventoryChanged();
+    }
 }
 
-void PantryPage::deleteSelectedItem()
+void PantryPage::deleteSelectedItem() //you get the idea
 {
-    const int row = inventoryTable->currentRow();
-
-    if (row < 0) {
-        QMessageBox::information(
-            this,
-            "Delete Item",
-            "Select an item to delete.");
-
+    int id = selectedItemId();
+    if (id < 0) {
+        QMessageBox::information(this, "No selection", "Select an item to delete.");
         return;
     }
 
-    const QString itemName =
-        inventoryTable->item(row, 0)->text();
+    auto confirm = QMessageBox::question(this, "Delete item",
+        "Are you sure you want to delete this item?");
+    if (confirm == QMessageBox::Yes) {
+        dbManager->removeItem(id);
+        refreshTable();
+        emit inventoryChanged();
+    }
+}
 
-    const QMessageBox::StandardButton result =
-        QMessageBox::question(
-            this,
-            "Delete Item",
-            "Remove " + itemName + " from the pantry?",
-            QMessageBox::Yes | QMessageBox::No);
+void PantryPage::applyFilters() //more or less the same as the old filtering function
+{
+    const QString search = searchField->text().trimmed();
+    const QString location = locationFilter->currentText();
 
-    if (result == QMessageBox::Yes) {
-        inventoryTable->removeRow(row);
+    for (int row = 0; row < inventoryTable->rowCount(); ++row) {
+        bool matchesSearch = search.isEmpty()
+            || inventoryTable->item(row, 0)->text().contains(search, Qt::CaseInsensitive);
+
+        bool matchesLocation = location.isEmpty()
+            || location == "All"
+            || inventoryTable->item(row, 3)->text() == location;
+
+        inventoryTable->setRowHidden(row, !(matchesSearch && matchesLocation));
     }
 }
