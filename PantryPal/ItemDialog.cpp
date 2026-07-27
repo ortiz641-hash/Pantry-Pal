@@ -1,6 +1,7 @@
 #include "ItemDialog.h"
 
 #include <QLineEdit>
+#include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QDateEdit>
 #include <QDialogButtonBox>
@@ -18,8 +19,16 @@ ItemDialog::ItemDialog(QWidget *parent, const PantryItem &existing) //mostly GUI
     categoryEdit = new QLineEdit(this);
 
     quantitySpin = new QDoubleSpinBox(this);
-    quantitySpin->setRange(0.0, 100000.0);
+    quantitySpin->setRange(1.0, 100000.0);
     quantitySpin->setDecimals(2);
+    minimumQuantitySpin = new QDoubleSpinBox(this); // new field for minimum quantity lets the user set a minimum quantity for the item, if the item goes below this quantity it will be highlighted in the main window.
+    minimumQuantitySpin->setRange(0.0, 100000.0);
+    minimumQuantitySpin->setDecimals(2);
+
+    locationCombo = new QComboBox(this);
+    locationCombo->setEditable(true); // Combo box that lets the user select the location of where their food item is going to go.
+    locationCombo->addItems({"Pantry", "Fridge", "Freezer", "Cabinet"});
+
 
     unitEdit = new QLineEdit(this);
     unitEdit->setPlaceholderText("e.g. kg, oz, count"); //thought place holder text was cool here 
@@ -38,6 +47,8 @@ ItemDialog::ItemDialog(QWidget *parent, const PantryItem &existing) //mostly GUI
     form->addRow("Unit:", unitEdit);
     form->addRow("Expiration date:", expirationEdit);
     form->addRow("Notes:", notesEdit);
+    form->addRow("Location:", locationCombo); // new field for location
+    form->addRow("Minimum Quantity:", minimumQuantitySpin); // new field for minimum quantity
 
     auto *buttons = new QDialogButtonBox(
         QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
@@ -55,6 +66,8 @@ ItemDialog::ItemDialog(QWidget *parent, const PantryItem &existing) //mostly GUI
         quantitySpin->setValue(existing.quantity);
         unitEdit->setText(existing.unit);
         notesEdit->setText(existing.notes);
+        locationCombo->setCurrentText(existing.location); // pre-fills the location combo box with the existing location
+        minimumQuantitySpin->setValue(existing.minimumQuantity); // pre-fills the minimum quantity spin box with the existing minimum quantity
 
         QDate parsedDate = QDate::fromString(existing.expirationDate, "yyyy-MM-dd");
         if (parsedDate.isValid()) {
@@ -68,7 +81,9 @@ PantryItem ItemDialog::item() const
     PantryItem item;
     item.name = nameEdit->text().trimmed();
     item.category = categoryEdit->text().trimmed();
+    item.location = locationCombo->currentText().trimmed(); // gets the location from the combo box
     item.quantity = quantitySpin->value();
+    item.minimumQuantity = minimumQuantitySpin->value(); // gets the minimum quantity from the spin box
     item.unit = unitEdit->text().trimmed();
     item.expirationDate = expirationEdit->date().toString("yyyy-MM-dd");
     item.notes = notesEdit->text().trimmed();

@@ -11,6 +11,8 @@ struct PantryItem
     QString name;
     QString category;
     double quantity = 0.0;
+    double minimumQuantity = 0.0; // new field for minimum quantity
+    QString location; // new field for location
     QString unit;
     QString expirationDate; // stored as 'YYYY-MM-DD'
     QString notes;
