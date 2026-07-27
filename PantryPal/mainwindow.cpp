@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QVBoxLayout>
+#include <QDate>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -19,6 +20,9 @@ MainWindow::MainWindow(QWidget *parent)
     resize(1280, 760);
     setMinimumSize(960, 600);
 
+    dbManager.connect(); // connect to database in mainwindow
+    dbManager.createTables(); //creates the table for the stats in the main window
+
     auto *mainView = new QWidget(this);
     setCentralWidget(mainView);
 
@@ -26,8 +30,6 @@ MainWindow::MainWindow(QWidget *parent)
     windowLayout->setContentsMargins(0, 0, 0, 0);
     windowLayout->setSpacing(0);
 
-    // The sidebar is embedded into the main window, so it cannot be closed
-    // separately. Stretch factors keep it at 1/5 of the available width.
     auto *sidebar = new QFrame;
     sidebar->setFrameShape(QFrame::StyledPanel);
     sidebar->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
@@ -71,10 +73,10 @@ MainWindow::MainWindow(QWidget *parent)
     auto *statsLayout = new QHBoxLayout;
     statsLayout->setSpacing(12);
 
-    auto *totalItemsButton = createStatButton("Total Items");
-    auto *expiringSoonButton = createStatButton("Expiring Soon");
-    auto *expiredButton = createStatButton("Expired");
-    auto *runningLowButton = createStatButton("Running Low");
+    totalItemsButton = createStatButton("Total Items"); //these 4 buttons hold the stats for the dashboard.
+    expiringSoonButton = createStatButton("Expiring Soon");
+    expiredButton = createStatButton("Expired");
+    runningLowButton = createStatButton("Running Low");
 
     statsLayout->addWidget(totalItemsButton);
     statsLayout->addWidget(expiringSoonButton);
@@ -85,7 +87,7 @@ MainWindow::MainWindow(QWidget *parent)
     auto *recentItemsPanel = new QFrame;
     recentItemsPanel->setFrameShape(QFrame::StyledPanel);
 
-    auto *recentLayout = new QVBoxLayout(recentItemsPanel);
+    recentLayout = new QVBoxLayout(recentItemsPanel); // holds a list of recent items using a vertical layout. the list is updated when the pantry page is updated.
     recentLayout->setContentsMargins(18, 16, 18, 16);
     recentLayout->setSpacing(0);
 
@@ -96,18 +98,19 @@ MainWindow::MainWindow(QWidget *parent)
     dashboardLayout->addWidget(recentItemsPanel, 1);
 
     auto *pageStack = new QStackedWidget;
+    auto *pantryPage = new PantryPage(&dbManager); // passing the dbManager pointer to the PantryPage constructor so it can access the database functions.
 
     //--- page stack ---- 
 
     pageStack->addWidget(dashboard);          // index 0
-    pageStack->addWidget(new PantryPage);     // index 1
+    pageStack->addWidget(pantryPage);         // index 1, used jons pagestack to switch between the dashboard and pantry page when the buttons are clicked.
     pageStack->addWidget(new ProfilePage);    // index 2
-
-    //--- connection -----
+      
 
     connect(dashboardButton, &QPushButton::clicked,
-            pageStack, [pageStack]() {
+            pageStack, [this, pageStack]() { // connect the dashboard button to switch to the dashboard page
                 pageStack->setCurrentIndex(0);
+                refreshDashboard();   // stats can go stale while on the pantry page so we needed a refresh when returning to the dashboard
             });
 
     connect(pantryButton, &QPushButton::clicked,
@@ -122,10 +125,23 @@ MainWindow::MainWindow(QWidget *parent)
 
     //---- layout ----- 
 
+    // gave the dashboard its own add item button and it jumps to the pantry page and refreshes whjen you go back to dashboard 
+    connect(addItemButton, &QPushButton::clicked,
+            pageStack, [pageStack, pantryPage]() {
+                pageStack->setCurrentIndex(1);
+                pantryPage->openAddItemDialog();
+            });
+
+    // When PantryPage changes data dashboard stats should update too
+    connect(pantryPage, &PantryPage::inventoryChanged,
+            this, &MainWindow::refreshDashboard);
+
     windowLayout->addWidget(sidebar);
     windowLayout->addWidget(pageStack);
     windowLayout->setStretch(0, 1);
     windowLayout->setStretch(1, 4);
+
+    refreshDashboard(); // call the refresh funct for when the app opens so the stats dont start stale
 }
 
 QPushButton *MainWindow::createNavigationButton(const QString &text)
@@ -141,4 +157,46 @@ QPushButton *MainWindow::createStatButton(const QString &title)
     button->setMinimumHeight(110);
     button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     return button;
+}
+
+void MainWindow::refreshDashboard() // refresh function.
+{
+    QVector<PantryItem> items = dbManager.getAllItems();
+
+    totalItemsButton->setText(QString("Total Items\n%1").arg(items.size()));
+
+    int expiringSoon = 0, expired = 0, runningLow = 0;
+    QDate today = QDate::currentDate();
+
+    for (const PantryItem &item : items) { //loops throught the items and checks their stats to see if they need to be updated if they do the dashboard should show these updates
+        QDate exp = QDate::fromString(item.expirationDate, "yyyy-MM-dd");
+        if (exp.isValid()) {
+            if (exp < today) {
+                expired++;
+            } else if (today.daysTo(exp) <= 7) {
+                expiringSoon++;
+            }
+        }
+        //i just made the item quantity threshold 1 but kept it a float because i guess if you wanna log half a banana or somehing you can.
+        if (item.quantity <= item.minimumQuantity) { //updated to use minimum quantity for the running low feature
+            runningLow++;
+        }
+    }
+
+    expiringSoonButton->setText(QString("Expiring Soon\n%1").arg(expiringSoon)); // updates the main window stats when the pantry page gets updates, could maybe call refreshdashboard here??
+    expiredButton->setText(QString("Expired\n%1").arg(expired));
+    runningLowButton->setText(QString("Running Low\n%1").arg(runningLow));
+
+    // Clear old recent-item labels (keep the title + stretch, remove everything between)
+    while (recentLayout->count() > 2) {
+        QLayoutItem *child = recentLayout->takeAt(1);
+        delete child->widget();
+        delete child;
+    }
+
+    int shown = 0;
+    for (auto it = items.crbegin(); it != items.crend() && shown < 5; ++it, ++shown) {
+        auto *label = new QLabel(QString("%1  —  %2 %3").arg(it->name).arg(it->quantity).arg(it->unit));
+        recentLayout->insertWidget(recentLayout->count() - 1, label);
+    }
 }
