@@ -33,11 +33,11 @@ bool DatabaseManager::connect()
     return true;
 }
 
-void DatabaseManager::createTables() //table creation function uses sql statement to make a table for the pantru items. 
+void DatabaseManager::createTables()
 {
     QSqlQuery query(db);
 
-    bool ok = query.exec(R"(
+    query.exec(R"(
         CREATE TABLE IF NOT EXISTS pantry_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -50,8 +50,18 @@ void DatabaseManager::createTables() //table creation function uses sql statemen
         )
     )");
 
-    if (!ok) {
-        qWarning() << "Failed to create pantry_items table:" << query.lastError().text(); //qWarning is a macro that prints a warning message to the console mad useful for debuging.
+    // ADDED a sql pragma, was running into an issue where db file still thought there was only 6 columns on the table after i updated it, this should prevent that from happening.
+    query.exec("PRAGMA user_version");
+    int version = 0;
+    if (query.next()) {
+        version = query.value(0).toInt();
+    }
+
+    // Migration 1: add location + minimum_quantity columns
+    if (version < 1) {
+        query.exec("ALTER TABLE pantry_items ADD COLUMN location TEXT");
+        query.exec("ALTER TABLE pantry_items ADD COLUMN minimum_quantity REAL NOT NULL DEFAULT 0");
+        query.exec("PRAGMA user_version = 1");
     }
 
     query.exec("CREATE INDEX IF NOT EXISTS idx_pantry_name ON pantry_items(name)");
@@ -59,19 +69,29 @@ void DatabaseManager::createTables() //table creation function uses sql statemen
 
 bool DatabaseManager::addItem(const PantryItem &item)
 {
-    QSqlQuery query(db); // query object is used to execute SQL statements and retrieve results from the databaseIt is initialized with the database connection db.
-    query.prepare(R"(
-        INSERT INTO pantry_items (name, category, quantity, unit, expiration_date, notes) 
-        VALUES (:name, :category, :quantity, :unit, :expiration_date, :notes)
+    QSqlQuery query(db);
+    bool prepared = query.prepare(R"(
+        INSERT INTO pantry_items (name, category, location, quantity, minimum_quantity, unit, expiration_date, notes)
+        VALUES (:name, :category, :location, :quantity, :minimumQuantity, :unit, :expiration_date, :notes)
     )");
-    query.bindValue(":name", item.name); //the next 6 lines are for locking the pantry item values to the statement above. keeps the format correct.
+
+     if (!prepared) {
+        qWarning() << "prepare failed:" << query.lastError().text();
+        return false;
+    }
+
+    
+    query.bindValue(":name", item.name);
     query.bindValue(":category", item.category);
+    query.bindValue(":location", item.location);
     query.bindValue(":quantity", item.quantity);
+    query.bindValue(":minimumQuantity", item.minimumQuantity);
     query.bindValue(":unit", item.unit);
     query.bindValue(":expiration_date", item.expirationDate);
     query.bindValue(":notes", item.notes);
 
     if (!query.exec()) {
+        qDebug() << "Bound value count:" << query.boundValueNames();
         qWarning() << "addItem failed:" << query.lastError().text();
         return false;
     }
@@ -91,14 +111,16 @@ bool DatabaseManager::removeItem(int id)
     return true;
 }
 
-bool DatabaseManager::updateItem(const PantryItem &item)
+bool DatabaseManager::updateItem(const PantryItem &item)//updated for location and min quant here too
 {
     QSqlQuery query(db);
     query.prepare(R"(
         UPDATE pantry_items
         SET name = :name,
             category = :category,
+            location = :location, 
             quantity = :quantity,
+            minimum_quantity = :minimum_quantity, 
             unit = :unit,
             expiration_date = :expiration,
             notes = :notes
@@ -107,6 +129,8 @@ bool DatabaseManager::updateItem(const PantryItem &item)
     query.bindValue(":name", item.name);
     query.bindValue(":category", item.category);
     query.bindValue(":quantity", item.quantity);
+    query.bindValue(":minimum_quantity", item.minimumQuantity); //binds the minimum quantity value to the statement above
+    query.bindValue(":location", item.location); //binds the location value to the statement    
     query.bindValue(":unit", item.unit);
     query.bindValue(":expiration", item.expirationDate);
     query.bindValue(":notes", item.notes);
@@ -121,23 +145,25 @@ bool DatabaseManager::updateItem(const PantryItem &item)
 
 QVector<PantryItem> DatabaseManager::getAllItems() //function returns a vector of all the pantry items. simple loop nothin crazy
 {
-    QVector<PantryItem> items;
+    QVector<PantryItem> items; //updated for min quant and location functionality
     QSqlQuery query(db);
     query.exec(R"(
-        SELECT id, name, category, quantity, unit, expiration_date, notes
+        SELECT id, name, category, location, quantity, minimum_quantity, unit, expiration_date, notes
         FROM pantry_items
         ORDER BY name
     )");
 
     while (query.next()) {
         PantryItem item;
-        item.id = query.value(0).toInt();
+        item.id             = query.value(0).toInt();
         item.name           = query.value(1).toString();
         item.category       = query.value(2).toString();
-        item.quantity       = query.value(3).toDouble();
-        item.unit           = query.value(4).toString();
-        item.expirationDate = query.value(5).toString();
-        item.notes          = query.value(6).toString();
+        item.location       = query.value(3).toString(); // Assuming location is stored in the 4th column
+        item.quantity       = query.value(4).toDouble();
+        item.minimumQuantity= query.value(5).toDouble(); // Assuming minimum quantity is stored in the 6th column
+        item.unit           = query.value(6).toString();
+        item.expirationDate = query.value(7).toString();
+        item.notes          = query.value(8).toString();
         items.append(item);
     }
     return items;
@@ -145,10 +171,10 @@ QVector<PantryItem> DatabaseManager::getAllItems() //function returns a vector o
 
 PantryItem DatabaseManager::getItemById(int id) //prob most important function, uses the ID to grab specific pantry items
 {
-    PantryItem item;
+    PantryItem item; //updated for min quant and loc
     QSqlQuery query(db);
     query.prepare(R"(
-        SELECT id, name, category, quantity, unit, expiration_date, notes
+        SELECT id, name, category, location, quantity, minimum_quantity, unit, expiration_date, notes 
         FROM pantry_items WHERE id = :id
     )");
     query.bindValue(":id", id);
@@ -157,10 +183,12 @@ PantryItem DatabaseManager::getItemById(int id) //prob most important function, 
         item.id             = query.value(0).toInt();
         item.name           = query.value(1).toString();
         item.category       = query.value(2).toString();
-        item.quantity       = query.value(3).toDouble();
-        item.unit           = query.value(4).toString();
-        item.expirationDate = query.value(5).toString();
-        item.notes          = query.value(6).toString();
-    }
+        item.location       = query.value(3).toString(); // Assuming location is stored in the 4th column
+        item.quantity       = query.value(4).toDouble(); 
+        item.minimumQuantity= query.value(5).toDouble(); // Assuming minimum quantity is stored in the 6th column
+        item.unit           = query.value(6).toString();
+        item.expirationDate = query.value(7).toString();
+        item.notes          = query.value(8).toString();
+    }                                   
     return item;
 }

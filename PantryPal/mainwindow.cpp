@@ -161,7 +161,7 @@ void MainWindow::refreshDashboard() // refresh function.
             }
         }
         //i just made the item quantity threshold 1 but kept it a float because i guess if you wanna log half a banana or somehing you can.
-        if (item.quantity <= 1.0) {
+        if (item.quantity <= item.minimumQuantity) { //updated to use minimum quantity for the running low feature
             runningLow++;
         }
     }

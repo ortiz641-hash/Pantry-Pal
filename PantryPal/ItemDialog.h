@@ -1,4 +1,4 @@
-// ItemDialog.h
+
 #ifndef ITEMDIALOG_H
 #define ITEMDIALOG_H
 
@@ -7,8 +7,9 @@
 
 class QLineEdit;
 class QDoubleSpinBox;
+class QComboBox;
 class QDateEdit;
-
+class QPushButton;
 class ItemDialog : public QDialog
 {
 public:
@@ -19,6 +20,8 @@ private:
     QLineEdit *nameEdit;
     QLineEdit *categoryEdit;
     QDoubleSpinBox *quantitySpin;
+    QComboBox *locationCombo; // new field for location
+    QDoubleSpinBox *minimumQuantitySpin; // new field for minimum quantity
     QLineEdit *unitEdit;
     QDateEdit *expirationEdit;
     QLineEdit *notesEdit;
