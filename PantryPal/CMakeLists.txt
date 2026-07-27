@@ -16,15 +16,17 @@ add_executable(PantryPalMain
     mainwindow.h
     pantrypage.h
     pantrypage.cpp
-    "loginwindow.h" 
-    "loginwindow.cpp"
+    loginwindow.h
+    loginwindow.cpp
     loginwindow.ui
+    profilepage.cpp 
+    profilepage.h
     DatabaseManager.h
     DatabaseManager.cpp
     ItemDialog.h
     ItemDialog.cpp
 )
-
+    
 target_link_libraries(PantryPalMain PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Sql)
 
 if(WIN32)

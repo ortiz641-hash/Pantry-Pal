@@ -1,6 +1,9 @@
 #include "mainwindow.h"
 #include "pantrypage.h"
+#include "profilepage.h"
 #include <QStackedWidget>
+
+
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -46,7 +49,10 @@ MainWindow::MainWindow(QWidget *parent)
     sidebarLayout->addWidget(dashboardButton);
     sidebarLayout->addWidget(pantryButton);
     sidebarLayout->addWidget(createNavigationButton("Shopping List"));
-    sidebarLayout->addWidget(createNavigationButton("Profile"));
+    
+    auto* profileButton = createNavigationButton("Profile"); 
+    sidebarLayout->addWidget(profileButton);
+   
     sidebarLayout->addStretch();
 
     auto *dashboard = new QFrame;
@@ -94,8 +100,12 @@ MainWindow::MainWindow(QWidget *parent)
     auto *pageStack = new QStackedWidget;
     auto *pantryPage = new PantryPage(&dbManager); // passing the dbManager pointer to the PantryPage constructor so it can access the database functions.
 
+    //--- page stack ---- 
+
     pageStack->addWidget(dashboard);          // index 0
     pageStack->addWidget(pantryPage);         // index 1, used jons pagestack to switch between the dashboard and pantry page when the buttons are clicked.
+    pageStack->addWidget(new ProfilePage);    // index 2
+      
 
     connect(dashboardButton, &QPushButton::clicked,
             pageStack, [this, pageStack]() { // connect the dashboard button to switch to the dashboard page
@@ -107,6 +117,13 @@ MainWindow::MainWindow(QWidget *parent)
             pageStack, [pageStack]() {
                 pageStack->setCurrentIndex(1);
             });
+   
+    connect(profileButton, &QPushButton::clicked,
+            pageStack, [pageStack]() {
+                pageStack->setCurrentIndex(2);
+            });
+
+    //---- layout ----- 
 
     // gave the dashboard its own add item button and it jumps to the pantry page and refreshes whjen you go back to dashboard 
     connect(addItemButton, &QPushButton::clicked,
