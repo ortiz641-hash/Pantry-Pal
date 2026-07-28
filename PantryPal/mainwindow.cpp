@@ -2,6 +2,7 @@
 #include "pantrypage.h"
 #include "profilepage.h"
 #include <QStackedWidget>
+#include "shoppinglist.h"
 
 
 
@@ -99,12 +100,13 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *pageStack = new QStackedWidget;
     auto *pantryPage = new PantryPage(&dbManager); // passing the dbManager pointer to the PantryPage constructor so it can access the database functions.
-
+    auto *shoppingPage = new ShoppingList();
     //--- page stack ---- 
 
     pageStack->addWidget(dashboard);          // index 0
     pageStack->addWidget(pantryPage);         // index 1, used jons pagestack to switch between the dashboard and pantry page when the buttons are clicked.
     pageStack->addWidget(new ProfilePage);    // index 2
+    pageStack->addWidget(shoppingPage);       // index 3
       
 
     connect(dashboardButton, &QPushButton::clicked,
