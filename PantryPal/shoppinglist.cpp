@@ -1,47 +1,79 @@
 #include "shoppinglist.h"
-#include "ui_shoppinglist.h"
+
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QListWidgetItem>
 
 ShoppingList::ShoppingList(QWidget* parent)
     : QWidget(parent)
-    , ui(new Ui::ShoppingList)
 {
-    ui->setupUi(this);
+    title = new QLabel("Shopping List");
+    title->setAlignment(Qt::AlignCenter);
+
+    QFont font;
+    font.setPointSize(18);
+    font.setBold(true);
+    title->setFont(font);
+
+    listWidget = new QListWidget();
+
+    refreshButton = new QPushButton("Refresh");
+    removeButton = new QPushButton("Remove Purchased");
+
+    QHBoxLayout* buttons = new QHBoxLayout();
+    buttons->addWidget(refreshButton);
+    buttons->addWidget(removeButton);
+
+    QVBoxLayout* layout = new QVBoxLayout(this);
+    layout->addWidget(title);
+    layout->addWidget(listWidget);
+    layout->addLayout(buttons);
+
+    connect(refreshButton,
+        &QPushButton::clicked,
+        this,
+        &ShoppingList::refreshShoppingList);
+
+    connect(removeButton,
+        &QPushButton::clicked,
+        this,
+        &ShoppingList::removePurchased);
+
+    refreshShoppingList();
 }
 
-ShoppingList::~ShoppingList()
+void ShoppingList::refreshShoppingList()
 {
-    delete ui;
-}
+    listWidget->clear();
 
-void ShoppingList::loadPantryItems(const QVector<Item>& items)
-{
-    pantryItems = items;
-    generateShoppingList();
-}
-
-void ShoppingList::generateShoppingList()
-{
-    ui->listWidget->clear();
-
-    QDate today = QDate::currentDate();
-
-    for (const Item& item : pantryItems)
+    // Temporary demo data
+    QStringList items =
     {
-        bool low = item.quantity <= item.minimumQuantity;
-        bool expired = item.expirationDate < today;
+        "Milk",
+        "Bread",
+        "Eggs",
+        "Chicken",
+        "Cheese"
+    };
 
-        if (low || expired)
+    for (const QString& name : items)
+    {
+        QListWidgetItem* item = new QListWidgetItem(name);
+
+        item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+        item->setCheckState(Qt::Unchecked);
+
+        listWidget->addItem(item);
+    }
+}
+
+void ShoppingList::removePurchased()
+{
+    for (int i = listWidget->count() - 1; i >= 0; --i)
+    {
+        if (listWidget->item(i)->checkState() == Qt::Checked)
         {
-            QListWidgetItem* shoppingItem =
-                new QListWidgetItem(item.name);
-
-            shoppingItem->setFlags(
-                shoppingItem->flags() |
-                Qt::ItemIsUserCheckable);
-
-            shoppingItem->setCheckState(Qt::Unchecked);
-
-            ui->listWidget->addItem(shoppingItem);
+            delete listWidget->takeItem(i);
         }
     }
 }
