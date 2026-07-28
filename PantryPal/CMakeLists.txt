@@ -25,6 +25,8 @@ add_executable(PantryPalMain
     DatabaseManager.cpp
     ItemDialog.h
     ItemDialog.cpp
+    shoppinglist.cpp
+    shoppinglist.h
 )
     
 target_link_libraries(PantryPalMain PRIVATE Qt${QT_VERSION_MAJOR}::Widgets Qt${QT_VERSION_MAJOR}::Sql)

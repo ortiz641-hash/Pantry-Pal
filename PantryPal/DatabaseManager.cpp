@@ -7,9 +7,7 @@
 #include <QDir>
 #include <QDebug>
 
-DatabaseManager::DatabaseManager()
-{
-}
+DatabaseManager::DatabaseManager(){}
 
 bool DatabaseManager::connect()
 {
@@ -65,7 +63,32 @@ void DatabaseManager::createTables()
     }
 
     query.exec("CREATE INDEX IF NOT EXISTS idx_pantry_name ON pantry_items(name)");
+
+    ShoppingListTable(); // this is so the call from the mainpage also calls the shoppinglistfunction, they both get called on startup
+
 }
+    
+
+void DatabaseManager::ShoppingListTable()
+    {
+        QSqlQuery shoppingquery(db);
+
+        shoppingquery.exec(R"(
+        CREATE TABLE IF NOT EXISTS shopping_list (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            quantity_needed REAL DEFAULT 0,
+            unit TEXT,
+            is_checked INTEGER NOT NULL DEFAULT 0,   
+            source TEXT DEFAULT 'manual',            
+            pantry_item_id INTEGER,                  
+            date_added TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (pantry_item_id) REFERENCES pantry_items(id) ON DELETE SET NULL
+        )
+    )");
+
+}
+
 
 bool DatabaseManager::addItem(const PantryItem &item)
 {
@@ -192,3 +215,9 @@ PantryItem DatabaseManager::getItemById(int id) //prob most important function, 
     }                                   
     return item;
 }
+
+//for meekeh to implement the shoppinglist functionality
+void DatabaseManager::syncShoppingListFromPantry(){}
+bool DatabaseManager::addShoppingListItem(const ShoppingListItem &item){return false;}
+bool DatabaseManager::removeShoppingListItem(int id){return false;}
+bool DatabaseManager::setShoppingListItemChecked(int id, bool checked){return false;}

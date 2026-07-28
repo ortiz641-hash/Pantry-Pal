@@ -1,19 +1,11 @@
-#pragma once
+
 #ifndef SHOPPINGLIST_H
 #define SHOPPINGLIST_H
 
-#include <QWidget>
-#include <QVector>
-#include <QString>
-#include <QDate>
+#include "DatabaseManager.h"
 
-struct Item
-{
-    QString name;
-    int quantity;
-    int minimumQuantity;
-    QDate expirationDate;
-};
+#include <QWidget>
+
 
 namespace Ui {
     class ShoppingList;
@@ -24,17 +16,16 @@ class ShoppingList : public QWidget
     Q_OBJECT
 
 public:
-    explicit ShoppingList(QWidget* parent = nullptr);
+    explicit ShoppingList(DatabaseManager *dbManager, QWidget* parent = nullptr);
     ~ShoppingList();
 
-    void loadPantryItems(const QVector<Item>& items);
+    void refreshShoppingList();
 
 private:
     Ui::ShoppingList* ui;
+    DatabaseManager *dbManager
 
-    QVector<Item> pantryItems;
-
-    void generateShoppingList();
+    void generateShoppingList(const QVector<ShoppingListItem> &items);
 };
 
 #endif
