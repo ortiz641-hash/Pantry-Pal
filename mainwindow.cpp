@@ -5,11 +5,15 @@
 
 
 
+#include <QAbstractItemView>
+#include <QDialog>
 #include <QFrame>
+#include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QSizePolicy>
+#include <QTableWidget>
 #include <QVBoxLayout>
 #include <QDate>
 
@@ -83,6 +87,26 @@ MainWindow::MainWindow(QWidget *parent)
     statsLayout->addWidget(expiredButton);
     statsLayout->addWidget(runningLowButton);
     dashboardLayout->addLayout(statsLayout);
+
+    connect(totalItemsButton, &QPushButton::clicked,
+            this, [this]() {
+                showItemListWindow(ItemListFilter::All);
+            });
+
+    connect(expiringSoonButton, &QPushButton::clicked,
+            this, [this]() {
+                showItemListWindow(ItemListFilter::ExpiringSoon);
+            });
+
+    connect(expiredButton, &QPushButton::clicked,
+            this, [this]() {
+                showItemListWindow(ItemListFilter::Expired);
+            });
+
+    connect(runningLowButton, &QPushButton::clicked,
+            this, [this]() {
+                showItemListWindow(ItemListFilter::RunningLow);
+            });
 
     auto *recentItemsPanel = new QFrame;
     recentItemsPanel->setFrameShape(QFrame::StyledPanel);
@@ -199,4 +223,106 @@ void MainWindow::refreshDashboard() // refresh function.
         auto *label = new QLabel(QString("%1  —  %2 %3").arg(it->name).arg(it->quantity).arg(it->unit));
         recentLayout->insertWidget(recentLayout->count() - 1, label);
     }
+}
+
+void MainWindow::showItemListWindow(ItemListFilter filter)
+{
+    const QVector<PantryItem> pantryItems = dbManager.getAllItems();
+    QVector<PantryItem> filteredItems;
+    const QDate today = QDate::currentDate();
+    QString title;
+
+    switch (filter) {
+    case ItemListFilter::All:
+        title = "Total Items";
+        break;
+    case ItemListFilter::ExpiringSoon:
+        title = "Expiring Soon";
+        break;
+    case ItemListFilter::Expired:
+        title = "Expired";
+        break;
+    case ItemListFilter::RunningLow:
+        title = "Running Low";
+        break;
+    }
+
+    for (const PantryItem &item : pantryItems) {
+        const QDate expirationDate =
+            QDate::fromString(item.expirationDate, "yyyy-MM-dd");
+
+        bool matches = false;
+        switch (filter) {
+        case ItemListFilter::All:
+            matches = true;
+            break;
+        case ItemListFilter::ExpiringSoon:
+            matches = expirationDate.isValid()
+                && expirationDate >= today
+                && today.daysTo(expirationDate) <= 7;
+            break;
+        case ItemListFilter::Expired:
+            matches = expirationDate.isValid()
+                && expirationDate < today;
+            break;
+        case ItemListFilter::RunningLow:
+            matches = item.quantity <= item.minimumQuantity;
+            break;
+        }
+
+        if (matches) {
+            filteredItems.append(item);
+        }
+    }
+
+    auto *listWindow = new QDialog(this);
+    listWindow->setAttribute(Qt::WA_DeleteOnClose);
+    listWindow->setWindowTitle(title);
+    listWindow->resize(950, 500);
+
+    auto *layout = new QVBoxLayout(listWindow);
+    auto *heading = new QLabel(
+        QString("%1 (%2)").arg(title).arg(filteredItems.size()),
+        listWindow);
+    layout->addWidget(heading);
+
+    auto *table = new QTableWidget(listWindow);
+    table->setColumnCount(8);
+    table->setHorizontalHeaderLabels({
+        "Name",
+        "Quantity",
+        "Minimum Quantity",
+        "Unit",
+        "Category",
+        "Location",
+        "Expiration",
+        "Notes"
+    });
+    table->setRowCount(filteredItems.size());
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->setSelectionMode(QAbstractItemView::SingleSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    for (int row = 0; row < filteredItems.size(); ++row) {
+        const PantryItem &item = filteredItems.at(row);
+        table->setItem(row, 0, new QTableWidgetItem(item.name));
+        table->setItem(row, 1,
+                       new QTableWidgetItem(QString::number(item.quantity)));
+        table->setItem(row, 2,
+                       new QTableWidgetItem(
+                           QString::number(item.minimumQuantity)));
+        table->setItem(row, 3, new QTableWidgetItem(item.unit));
+        table->setItem(row, 4, new QTableWidgetItem(item.category));
+        table->setItem(row, 5, new QTableWidgetItem(item.location));
+        table->setItem(row, 6,
+                       new QTableWidgetItem(item.expirationDate));
+        table->setItem(row, 7, new QTableWidgetItem(item.notes));
+    }
+
+    table->horizontalHeader()->setSectionResizeMode(
+        QHeaderView::ResizeToContents);
+    table->horizontalHeader()->setStretchLastSection(true);
+    layout->addWidget(table);
+
+    listWindow->show();
 }

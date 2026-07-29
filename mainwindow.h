@@ -16,10 +16,19 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 private:
+    enum class ItemListFilter
+    {
+        All,
+        ExpiringSoon,
+        Expired,
+        RunningLow
+    };
+
     QPushButton *createNavigationButton(const QString &text);
     QPushButton *createStatButton(const QString &title);
 
     void refreshDashboard();
+    void showItemListWindow(ItemListFilter filter);
 
     DatabaseManager dbManager;
 
