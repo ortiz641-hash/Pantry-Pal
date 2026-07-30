@@ -1,5 +1,5 @@
 #ifndef PROFILEPAGE_H
-#define PROFILEPAHE_H
+#define PROFILEPAGE_H
 
 #include <QWidget>
 
@@ -31,4 +31,3 @@ private:
 	bool isEditing = false;
 };
 #endif   
-

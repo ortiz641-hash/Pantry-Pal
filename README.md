@@ -17,7 +17,8 @@ A desktop application that is designed to help households manage their food effi
 - Expiration tracking
 - Expiration alerts
 - Search \ Filter
-- Grocery lists
+- Shopping list with persistent manual item entry
+- Automatic shopping-list items when pantry stock is low or expired
 
 ## Tech Stack
 

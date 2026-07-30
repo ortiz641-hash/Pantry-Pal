@@ -1,6 +1,7 @@
 #include "mainwindow.h"
-#include "pantrypage.h"
+#include "PantryPage.h"
 #include "profilepage.h"
+#include "shoppinglist.h"
 #include <QStackedWidget>
 
 
@@ -16,6 +17,41 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 #include <QDate>
+#include <QStringList>
+#include <QtGlobal>
+
+namespace
+{
+QDate parseExpirationDate(const QString &value)
+{
+    const QString trimmedValue = value.trimmed();
+
+    QDate parsedDate = QDate::fromString(trimmedValue, Qt::ISODate);
+    if (parsedDate.isValid()) {
+        return parsedDate;
+    }
+
+    const QStringList supportedFormats = {
+        "MM/dd/yyyy",
+        "M/d/yyyy",
+        "MM-dd-yyyy"
+    };
+
+    for (const QString &format : supportedFormats) {
+        parsedDate = QDate::fromString(trimmedValue, format);
+        if (parsedDate.isValid()) {
+            return parsedDate;
+        }
+    }
+
+    return QDate();
+}
+
+double lowStockThreshold(const PantryItem &item)
+{
+    return qMax(1.0, item.minimumQuantity);
+}
+}
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -49,10 +85,11 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *dashboardButton = createNavigationButton("Dashboard");
     auto *pantryButton = createNavigationButton("Pantry");
+    auto *shoppingListButton = createNavigationButton("Shopping List");
 
     sidebarLayout->addWidget(dashboardButton);
     sidebarLayout->addWidget(pantryButton);
-    sidebarLayout->addWidget(createNavigationButton("Shopping List"));
+    sidebarLayout->addWidget(shoppingListButton);
     
     auto* profileButton = createNavigationButton("Profile"); 
     sidebarLayout->addWidget(profileButton);
@@ -123,12 +160,14 @@ MainWindow::MainWindow(QWidget *parent)
 
     auto *pageStack = new QStackedWidget;
     auto *pantryPage = new PantryPage(&dbManager); // passing the dbManager pointer to the PantryPage constructor so it can access the database functions.
+    auto *shoppingListPage = new ShoppingList(&dbManager);
 
     //--- page stack ---- 
 
     pageStack->addWidget(dashboard);          // index 0
     pageStack->addWidget(pantryPage);         // index 1, used jons pagestack to switch between the dashboard and pantry page when the buttons are clicked.
-    pageStack->addWidget(new ProfilePage);    // index 2
+    pageStack->addWidget(shoppingListPage);   // index 2
+    pageStack->addWidget(new ProfilePage);    // index 3
       
 
     connect(dashboardButton, &QPushButton::clicked,
@@ -141,10 +180,16 @@ MainWindow::MainWindow(QWidget *parent)
             pageStack, [pageStack]() {
                 pageStack->setCurrentIndex(1);
             });
+
+    connect(shoppingListButton, &QPushButton::clicked,
+            pageStack, [pageStack, shoppingListPage]() {
+                shoppingListPage->refreshList();
+                pageStack->setCurrentIndex(2);
+            });
    
     connect(profileButton, &QPushButton::clicked,
             pageStack, [pageStack]() {
-                pageStack->setCurrentIndex(2);
+                pageStack->setCurrentIndex(3);
             });
 
     //---- layout ----- 
@@ -159,6 +204,8 @@ MainWindow::MainWindow(QWidget *parent)
     // When PantryPage changes data dashboard stats should update too
     connect(pantryPage, &PantryPage::inventoryChanged,
             this, &MainWindow::refreshDashboard);
+    connect(pantryPage, &PantryPage::inventoryChanged,
+            shoppingListPage, &ShoppingList::refreshList);
 
     windowLayout->addWidget(sidebar);
     windowLayout->addWidget(pageStack);
@@ -193,16 +240,15 @@ void MainWindow::refreshDashboard() // refresh function.
     QDate today = QDate::currentDate();
 
     for (const PantryItem &item : items) { //loops throught the items and checks their stats to see if they need to be updated if they do the dashboard should show these updates
-        QDate exp = QDate::fromString(item.expirationDate, "yyyy-MM-dd");
+        QDate exp = parseExpirationDate(item.expirationDate);
         if (exp.isValid()) {
-            if (exp < today) {
+            if (exp <= today) {
                 expired++;
             } else if (today.daysTo(exp) <= 7) {
                 expiringSoon++;
             }
         }
-        //i just made the item quantity threshold 1 but kept it a float because i guess if you wanna log half a banana or somehing you can.
-        if (item.quantity <= item.minimumQuantity) { //updated to use minimum quantity for the running low feature
+        if (item.quantity <= lowStockThreshold(item)) {
             runningLow++;
         }
     }
@@ -249,7 +295,7 @@ void MainWindow::showItemListWindow(ItemListFilter filter)
 
     for (const PantryItem &item : pantryItems) {
         const QDate expirationDate =
-            QDate::fromString(item.expirationDate, "yyyy-MM-dd");
+            parseExpirationDate(item.expirationDate);
 
         bool matches = false;
         switch (filter) {
@@ -258,15 +304,15 @@ void MainWindow::showItemListWindow(ItemListFilter filter)
             break;
         case ItemListFilter::ExpiringSoon:
             matches = expirationDate.isValid()
-                && expirationDate >= today
+                && expirationDate > today
                 && today.daysTo(expirationDate) <= 7;
             break;
         case ItemListFilter::Expired:
             matches = expirationDate.isValid()
-                && expirationDate < today;
+                && expirationDate <= today;
             break;
         case ItemListFilter::RunningLow:
-            matches = item.quantity <= item.minimumQuantity;
+            matches = item.quantity <= lowStockThreshold(item);
             break;
         }
 
