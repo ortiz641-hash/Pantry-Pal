@@ -1,40 +1,34 @@
-#pragma once
 #ifndef SHOPPINGLIST_H
 #define SHOPPINGLIST_H
 
 #include <QWidget>
-#include <QVector>
-#include <QString>
-#include <QDate>
 
-struct Item
-{
-    QString name;
-    int quantity;
-    int minimumQuantity;
-    QDate expirationDate;
-};
-
-namespace Ui {
-    class ShoppingList;
-}
+class DatabaseManager;
+class QPushButton;
+class QShowEvent;
+class QTableWidget;
 
 class ShoppingList : public QWidget
 {
     Q_OBJECT
 
 public:
-    explicit ShoppingList(QWidget* parent = nullptr);
-    ~ShoppingList();
+    explicit ShoppingList(DatabaseManager *dbManager,
+                          QWidget *parent = nullptr);
 
-    void loadPantryItems(const QVector<Item>& items);
+    void refreshList();
+
+protected:
+    void showEvent(QShowEvent *event) override;
 
 private:
-    Ui::ShoppingList* ui;
+    void addManualItem();
+    void removeSelectedItem();
 
-    QVector<Item> pantryItems;
-
-    void generateShoppingList();
+    DatabaseManager *dbManager;
+    QPushButton *addButton;
+    QTableWidget *shoppingTable;
+    QPushButton *removeButton;
 };
 
-#endif
+#endif // SHOPPINGLIST_H

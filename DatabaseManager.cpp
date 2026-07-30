@@ -6,6 +6,42 @@
 #include <QStandardPaths>
 #include <QDir>
 #include <QDebug>
+#include <QDate>
+#include <QStringList>
+#include <QtGlobal>
+
+namespace
+{
+QDate parseExpirationDate(const QString &value)
+{
+    const QString trimmedValue = value.trimmed();
+
+    QDate parsedDate = QDate::fromString(trimmedValue, Qt::ISODate);
+    if (parsedDate.isValid()) {
+        return parsedDate;
+    }
+
+    const QStringList supportedFormats = {
+        "MM/dd/yyyy",
+        "M/d/yyyy",
+        "MM-dd-yyyy"
+    };
+
+    for (const QString &format : supportedFormats) {
+        parsedDate = QDate::fromString(trimmedValue, format);
+        if (parsedDate.isValid()) {
+            return parsedDate;
+        }
+    }
+
+    return QDate();
+}
+
+double lowStockThreshold(const PantryItem &item)
+{
+    return qMax(1.0, item.minimumQuantity);
+}
+}
 
 DatabaseManager::DatabaseManager()
 {
@@ -29,6 +65,8 @@ bool DatabaseManager::connect()
         return false;
     }
 
+    QSqlQuery foreignKeys(db);
+    foreignKeys.exec("PRAGMA foreign_keys = ON");
 
     return true;
 }
@@ -65,6 +103,44 @@ void DatabaseManager::createTables()
     }
 
     query.exec("CREATE INDEX IF NOT EXISTS idx_pantry_name ON pantry_items(name)");
+
+    query.exec(R"(
+        CREATE TABLE IF NOT EXISTS shopping_list_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            quantity REAL NOT NULL DEFAULT 1,
+            unit TEXT,
+            checked INTEGER NOT NULL DEFAULT 0,
+            source TEXT NOT NULL DEFAULT 'manual',
+            pantry_item_id INTEGER,
+            reason TEXT,
+            date_added TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (pantry_item_id) REFERENCES pantry_items(id) ON DELETE CASCADE
+        )
+    )");
+
+    query.exec(R"(
+        DELETE FROM shopping_list_items
+        WHERE source = 'automatic'
+          AND pantry_item_id IS NOT NULL
+          AND id NOT IN (
+              SELECT MIN(id)
+              FROM shopping_list_items
+              WHERE source = 'automatic'
+                AND pantry_item_id IS NOT NULL
+              GROUP BY pantry_item_id
+          )
+    )");
+
+    query.exec(R"(
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_shopping_automatic_pantry_item
+        ON shopping_list_items(pantry_item_id)
+        WHERE source = 'automatic' AND pantry_item_id IS NOT NULL
+    )");
+
+    query.exec("CREATE INDEX IF NOT EXISTS idx_shopping_name ON shopping_list_items(name)");
+    query.exec("DELETE FROM shopping_list_items WHERE source = 'automatic'");
+    query.exec("PRAGMA user_version = 2");
 }
 
 bool DatabaseManager::addItem(const PantryItem &item)
@@ -191,4 +267,299 @@ PantryItem DatabaseManager::getItemById(int id) //prob most important function, 
         item.notes          = query.value(8).toString();
     }                                   
     return item;
+}
+
+bool DatabaseManager::addShoppingListItem(const ShoppingListItem &item)
+{
+    const QString trimmedName = item.name.trimmed();
+    const QString trimmedReason = item.reason.trimmed();
+    if (trimmedName.isEmpty()
+        || item.quantity <= 0.0
+        || trimmedReason.isEmpty()) {
+        return false;
+    }
+
+    QSqlQuery duplicateQuery(db);
+    duplicateQuery.prepare(R"(
+        SELECT 1
+        FROM shopping_list_items
+        WHERE source = 'manual'
+          AND LOWER(TRIM(name)) = LOWER(TRIM(:name))
+        LIMIT 1
+    )");
+    duplicateQuery.bindValue(":name", trimmedName);
+
+    if (!duplicateQuery.exec()) {
+        qWarning() << "Shopping list duplicate check failed:"
+                   << duplicateQuery.lastError().text();
+        return false;
+    }
+
+    if (duplicateQuery.next()) {
+        return false;
+    }
+
+    QSqlQuery query(db);
+    query.prepare(R"(
+        INSERT INTO shopping_list_items
+            (name, quantity, unit, checked, source, pantry_item_id, reason)
+        VALUES
+            (:name, :quantity, '', 0, 'manual', NULL, :reason)
+    )");
+    query.bindValue(":name", trimmedName);
+    query.bindValue(":quantity", item.quantity);
+    query.bindValue(":reason", trimmedReason);
+
+    if (!query.exec()) {
+        qWarning() << "addShoppingListItem failed:" << query.lastError().text();
+        return false;
+    }
+
+    return true;
+}
+
+bool DatabaseManager::removeShoppingListItem(int id)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        DELETE FROM shopping_list_items
+        WHERE id = :id AND source = 'manual'
+    )");
+    query.bindValue(":id", id);
+
+    if (!query.exec()) {
+        qWarning() << "removeShoppingListItem failed:"
+                   << query.lastError().text();
+        return false;
+    }
+
+    return query.numRowsAffected() > 0;
+}
+
+bool DatabaseManager::setShoppingListItemChecked(int id, bool checked)
+{
+    QSqlQuery query(db);
+    query.prepare(R"(
+        UPDATE shopping_list_items
+        SET checked = :checked
+        WHERE id = :id
+    )");
+    query.bindValue(":checked", checked ? 1 : 0);
+    query.bindValue(":id", id);
+
+    if (!query.exec()) {
+        qWarning() << "setShoppingListItemChecked failed:"
+                   << query.lastError().text();
+        return false;
+    }
+
+    return query.numRowsAffected() > 0;
+}
+
+bool DatabaseManager::clearCheckedShoppingListItems()
+{
+    if (!db.transaction()) {
+        return false;
+    }
+
+    QSqlQuery deleteManual(db);
+    if (!deleteManual.exec(R"(
+        DELETE FROM shopping_list_items
+        WHERE checked = 1 AND source = 'manual'
+    )")) {
+        qWarning() << "Could not clear checked manual shopping items:"
+                   << deleteManual.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    // Automatic entries remain until the pantry item is no longer low or
+    // expired, so clearing them resets their checkmark instead of deleting.
+    QSqlQuery resetAutomatic(db);
+    if (!resetAutomatic.exec(R"(
+        UPDATE shopping_list_items
+        SET checked = 0
+        WHERE checked = 1 AND source = 'automatic'
+    )")) {
+        qWarning() << "Could not reset automatic shopping items:"
+                   << resetAutomatic.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return db.commit();
+}
+
+bool DatabaseManager::syncShoppingListWithPantry()
+{
+    const QVector<PantryItem> pantryItems = getAllItems();
+    const QDate today = QDate::currentDate();
+
+    if (!db.transaction()) {
+        return false;
+    }
+
+    for (const PantryItem &item : pantryItems) {
+        const QDate expirationDate =
+            parseExpirationDate(item.expirationDate);
+        const bool expired =
+            expirationDate.isValid() && expirationDate <= today;
+        const double threshold = lowStockThreshold(item);
+        const bool low = item.quantity <= threshold;
+
+        if (!low && !expired) {
+            QSqlQuery removeResolvedItem(db);
+            removeResolvedItem.prepare(R"(
+                DELETE FROM shopping_list_items
+                WHERE source = 'automatic' AND pantry_item_id = :pantryId
+            )");
+            removeResolvedItem.bindValue(":pantryId", item.id);
+
+            if (!removeResolvedItem.exec()) {
+                qWarning() << "Could not remove resolved automatic item:"
+                           << removeResolvedItem.lastError().text();
+                db.rollback();
+                return false;
+            }
+            continue;
+        }
+
+        const QString reason = expired ? "Expired" : "Running low";
+
+        double suggestedQuantity = 1.0;
+        if (expired) {
+            suggestedQuantity = qMax(1.0, threshold);
+        } else {
+            suggestedQuantity =
+                qMax(1.0, threshold - item.quantity);
+        }
+
+        QSqlQuery existingQuery(db);
+        existingQuery.prepare(R"(
+            SELECT id
+            FROM shopping_list_items
+            WHERE source = 'automatic' AND pantry_item_id = :pantryId
+        )");
+        existingQuery.bindValue(":pantryId", item.id);
+
+        if (!existingQuery.exec()) {
+            qWarning() << "Could not find automatic shopping item:"
+                       << existingQuery.lastError().text();
+            db.rollback();
+            return false;
+        }
+
+        if (existingQuery.next()) {
+            QSqlQuery updateQuery(db);
+            updateQuery.prepare(R"(
+                UPDATE shopping_list_items
+                SET name = :name,
+                    quantity = :quantity,
+                    unit = :unit,
+                    reason = :reason
+                WHERE id = :id
+            )");
+            updateQuery.bindValue(":name", item.name);
+            updateQuery.bindValue(":quantity", suggestedQuantity);
+            updateQuery.bindValue(":unit", item.unit);
+            updateQuery.bindValue(":reason", reason);
+            updateQuery.bindValue(":id", existingQuery.value(0).toInt());
+
+            if (!updateQuery.exec()) {
+                qWarning() << "Could not update automatic shopping item:"
+                           << updateQuery.lastError().text();
+                db.rollback();
+                return false;
+            }
+        } else {
+            QSqlQuery manualDuplicateQuery(db);
+            manualDuplicateQuery.prepare(R"(
+                SELECT 1
+                FROM shopping_list_items
+                WHERE source = 'manual'
+                  AND LOWER(TRIM(name)) = LOWER(TRIM(:name))
+                LIMIT 1
+            )");
+            manualDuplicateQuery.bindValue(":name", item.name);
+
+            if (!manualDuplicateQuery.exec()) {
+                qWarning() << "Could not check for a manual shopping item:"
+                           << manualDuplicateQuery.lastError().text();
+                db.rollback();
+                return false;
+            }
+
+            if (manualDuplicateQuery.next()) {
+                continue;
+            }
+
+            QSqlQuery insertQuery(db);
+            insertQuery.prepare(R"(
+                INSERT INTO shopping_list_items
+                    (name, quantity, unit, checked, source, pantry_item_id, reason)
+                VALUES
+                    (:name, :quantity, :unit, 0, 'automatic', :pantryId, :reason)
+            )");
+            insertQuery.bindValue(":name", item.name);
+            insertQuery.bindValue(":quantity", suggestedQuantity);
+            insertQuery.bindValue(":unit", item.unit);
+            insertQuery.bindValue(":pantryId", item.id);
+            insertQuery.bindValue(":reason", reason);
+
+            if (!insertQuery.exec()) {
+                qWarning() << "Could not add automatic shopping item:"
+                           << insertQuery.lastError().text();
+                db.rollback();
+                return false;
+            }
+        }
+    }
+
+    QSqlQuery removeDeletedItems(db);
+    if (!removeDeletedItems.exec(R"(
+        DELETE FROM shopping_list_items
+        WHERE source = 'automatic'
+          AND pantry_item_id NOT IN (SELECT id FROM pantry_items)
+    )")) {
+        qWarning() << "Could not remove deleted pantry items from shopping list:"
+                   << removeDeletedItems.lastError().text();
+        db.rollback();
+        return false;
+    }
+
+    return db.commit();
+}
+
+QVector<ShoppingListItem> DatabaseManager::getShoppingListItems()
+{
+    QVector<ShoppingListItem> items;
+    QSqlQuery query(db);
+
+    if (!query.exec(R"(
+        SELECT id, name, quantity, unit, checked, source, pantry_item_id, reason
+        FROM shopping_list_items
+        WHERE source = 'manual'
+        ORDER BY name COLLATE NOCASE
+    )")) {
+        qWarning() << "getShoppingListItems failed:"
+                   << query.lastError().text();
+        return items;
+    }
+
+    while (query.next()) {
+        ShoppingListItem item;
+        item.id = query.value(0).toInt();
+        item.name = query.value(1).toString();
+        item.quantity = query.value(2).toDouble();
+        item.unit = query.value(3).toString();
+        item.checked = query.value(4).toInt() != 0;
+        item.source = query.value(5).toString();
+        item.pantryItemId = query.value(6).isNull()
+            ? -1
+            : query.value(6).toInt();
+        item.reason = query.value(7).toString();
+        items.append(item);
+    }
+
+    return items;
 }

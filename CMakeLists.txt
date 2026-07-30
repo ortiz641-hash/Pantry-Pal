@@ -14,8 +14,10 @@ add_executable(PantryPalMain
     main.cpp
     mainwindow.cpp
     mainwindow.h
-    pantrypage.h
-    pantrypage.cpp
+    PantryPage.h
+    PantryPage.cpp
+    shoppinglist.h
+    shoppinglist.cpp
     loginwindow.h
     loginwindow.cpp
     loginwindow.ui

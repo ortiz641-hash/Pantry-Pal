@@ -18,6 +18,18 @@ struct PantryItem
     QString notes;
 };
 
+struct ShoppingListItem
+{
+    int id = -1;
+    QString name;
+    double quantity = 1.0;
+    QString unit;
+    bool checked = false;
+    QString source = "manual";
+    int pantryItemId = -1;
+    QString reason;
+};
+
 class DatabaseManager
 {
 public:
@@ -32,6 +44,14 @@ public:
     bool updateItem(const PantryItem &item); // updates an existing item in the database by its id with the edit button in the gui. should update the gui if the edit makes it expired or running low.
     QVector<PantryItem> getAllItems(); // a vector to retrieve all the items 
     PantryItem getItemById(int id); // will get a specific pantry item by its ID
+
+    // Shopping list operations
+    bool addShoppingListItem(const ShoppingListItem &item);
+    bool removeShoppingListItem(int id);
+    bool setShoppingListItemChecked(int id, bool checked);
+    bool clearCheckedShoppingListItems();
+    bool syncShoppingListWithPantry();
+    QVector<ShoppingListItem> getShoppingListItems();
 
 private:
     QSqlDatabase db; // just the database object, used to connect to the database and perform queries.
