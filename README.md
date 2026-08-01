@@ -21,7 +21,12 @@ A desktop application that is designed to help households manage their food effi
 - Automatic shopping-list items when pantry stock is low or expired
 
 ## Build
-- Download Zip
+- Go to current releases
+- Download zip
+- Extract 1st zip
+- Inside the zipped folder there will be one more zip to extract
+- Open the folders until you see the PantryPal.exe
+- Read the README.txt
 - Run executable 
 
 ## Tech Stack
