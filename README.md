@@ -20,6 +20,10 @@ A desktop application that is designed to help households manage their food effi
 - Shopping list with persistent manual item entry
 - Automatic shopping-list items when pantry stock is low or expired
 
+## Build
+- Download Zip
+- Run executable 
+
 ## Tech Stack
 
 | Component | Technology | Reason |
